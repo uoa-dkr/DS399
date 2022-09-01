@@ -1,0 +1,104 @@
+---
+title: "Sentiment Analysis"
+author: "Kerui"
+date: "`r lubridate::today()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Packages(just in case haven't installed)
+```{r message=F,warning=F}
+library(tidyverse)
+library(tidytext)
+library(ggrepel)
+library(plotly)
+```
+
+
+
+# Data readin
+```{r input,message=F}
+words <- read_csv('data/sentiment-data.csv', col_names = F)
+words
+```
+
+
+# Data Cleaning
+```{r clean}
+# complicated data cleaning for first question :(
+col1_words <- words %>% 
+  slice(-1) %>% 
+  select(X1) %>% 
+  unnest_tokens(output = word, input = X1, token = str_split, pattern = ',|、|\\*|\\. |，') %>% 
+  mutate(word = str_trim(word)) %>% 
+  filter(str_count(word, '\\ ') < 4 & str_length(word) > 2) %>%
+  mutate(word = ifelse(str_count(word, '\\ ') == 3, str_split(word, '\\ '), word)) %>% 
+  unnest(word) %>% 
+  mutate(word = str_remove(word, '.{8}\\)|\\ to$|^be\\ |^bit\\ |.{18}'),
+         word = str_split(word, '\\/')) %>%
+  unnest(word) %>% 
+  filter(str_length(word) > 0)
+
+col1_words
+```
+
+
+# top 20 most frequent words in question one with its visualization
+```{r top 20}
+top_20 <- col1_words %>% 
+  count(word, sort = T) %>% 
+  head(20);top_20
+
+top_20 %>% 
+  mutate(word = fct_reorder(word, n)) %>% 
+  ggplot(aes(n, word, fill = word)) + 
+  geom_col(show.legend = F, width = .5) + 
+  scale_fill_viridis_d() +
+  theme(axis.text.y = element_blank(), 
+        axis.ticks.y = element_blank(), 
+        axis.title.y = element_text(angle = 0, vjust = .5, size = rel(1.2))) +
+  xlab('frequent') + 
+  xlim(c(0,70)) + 
+  geom_text(aes(label=word), hjust = -.5)
+```
+
+
+
+# sentiment words comparison
+```{r comparison, message=F}
+p <- col1_words %>% 
+  count(word) %>% 
+  inner_join(get_sentiments()) %>% 
+  group_by(sentiment) %>% 
+  slice_max(n, n = 9) %>% 
+  ungroup() %>% 
+  mutate(n = ifelse(sentiment == "negative", -n, n)) %>%
+  mutate(word = fct_reorder(word, n)) %>%
+  ggplot() +
+  geom_col(aes(n, word, fill = sentiment)) +
+  labs(x = "Contribution to sentiment")
+ggplotly(p)
+
+col1_words %>% 
+  count(word) %>% 
+  inner_join(get_sentiments()) %>% 
+  ggplot(aes(0,0)) +
+  geom_text_repel(aes(label = word, size = n, colour = sentiment),
+                  force_pull = 0, max.overlaps = Inf,
+                  segment.color = NA, point.padding = NA, seed = 399, show.legend = F) +
+  facet_grid(~ sentiment) +
+  theme_bw() +
+  theme(axis.text = element_blank(), axis.ticks = element_blank()) +
+  labs(x = "", y = "")
+```
+
+
+
+
+
+
+
